@@ -133,10 +133,6 @@ def record_composition(context, seed):
         data1 = fade_in_and_out(data1, sr, seconds_fading=0.1)
         data2 = fade_in_and_out(data2, sr, seconds_fading=0.1)
 
-        if context["name"]=="wave":
-            data1 = np.concatenate([data1, np.zeros(int(sr*0.5))])
-            data2 = np.concatenate([data2, np.zeros(int(sr*0.5))])
-        
         if context["name"]=="flat":
             data1 = data1[:8000]
             data2 = data2[:8000]
