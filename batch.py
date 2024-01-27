@@ -10,44 +10,46 @@ import json
 import librosa
 from tqdm import tqdm
 
-PATCHES_IN_TOTAL = 9000
 
-def sample_space():
+def sample_space(context):
     server = Server()
 
     # Recording properties
     SAMPLE_RATE = 44100
-    SECONDS = 0.5
+    SECONDS = context["SAMPLE_LENGTH"]
     # Recording device
     REC.default.device = 'Soundflower (2ch)'
 
     i = 0
-    while i < PATCHES_IN_TOTAL:
-        patch = sample_params()
+    while i < context["PATCHES_IN_TOTAL"]:
+        patch = sample_params(context)
         synth = Synth(server, "superfm", patch)
 
         recording = REC.rec( int(SECONDS * SAMPLE_RATE), samplerate = SAMPLE_RATE, channels = 1)
         REC.wait()
 
-        write(f"batch/audio/{i}.wav", SAMPLE_RATE, recording)
-        json.dump(patch, open(f"batch/patches/{i}.json", "w"))
+        write(f"batch/audio_{context['name']}/{i}.wav", SAMPLE_RATE, recording)
+        json.dump(patch, open(f"batch/patches_{context['name']}/{i}.json", "w"))
 
         synth.free()
 
         i += 1
 
-def compose(seed):
+def compose(context, seed):
     PATCHES_IN_COMPOSITION = 300
     SR = 44100
 
-    patches = np.zeros((PATCHES_IN_TOTAL, 22050), dtype=np.float32)
-    for i in tqdm(range(PATCHES_IN_TOTAL)):
-        _, data = wavfile.read(f'batch/audio/{i}.wav') # load the data
+    _, examplar = wavfile.read(f"batch/audio_{context['name']}/{0}.wav")
+    patches = np.zeros((context["PATCHES_IN_TOTAL"], len(examplar)), dtype=np.float32)
+
+    for i in tqdm(range(context["PATCHES_IN_TOTAL"])):
+        _, data = wavfile.read(f"batch/audio_{context['name']}/{i}.wav") # load the data
         patches[i]=data
     patches = (patches.T - np.mean(patches, axis=1)).T # subtract mean
 
-    mffcs = np.zeros((PATCHES_IN_TOTAL, 20*44), dtype=np.float32)
-    for i in tqdm(range(PATCHES_IN_TOTAL)):
+    examplar = librosa.feature.mfcc(y=examplar, sr=SR).flatten()
+    mffcs = np.zeros((context["PATCHES_IN_TOTAL"], len(examplar)), dtype=np.float32)
+    for i in tqdm(range(context["PATCHES_IN_TOTAL"])):
         mffcs[i, :] = librosa.feature.mfcc(y=patches[i], sr=SR).flatten()
     
     normalised = (mffcs.T / np.linalg.norm(mffcs, axis=1).T).T
@@ -65,7 +67,7 @@ def compose(seed):
         
         composition.append(int(next_patch))
 
-    json.dump(composition, open(f"out/composition_seed_{seed}.json", "w"))
+    json.dump(composition, open(f"out/composition_{context['name']}_seed_{seed}.json", "w"))
 
 def linear_crossfader(one, two):
     assert len(one) == len(two)
@@ -99,40 +101,51 @@ def maad_crossfader(s1, s2, fs, fade_len):
     )
     return s_out
 
-def fade_in(audio, sr):
-    samples_fading = sr*8
+def fade_in(audio, sr, seconds_fading=8):
+    samples_fading = int(sr*seconds_fading)
     fader = np.concatenate([
         np.arange(0.0, 1.0, 1.0/samples_fading),
         np.ones(len(audio)-samples_fading),
     ])
     return audio*fader
 
-def fade_out(audio, sr):
-    samples_fading = sr*8
+def fade_out(audio, sr, seconds_fading=8):
+    samples_fading = int(sr*seconds_fading)
     fader = np.concatenate([
         np.ones(len(audio)-samples_fading),
         np.arange(1.0, 0.0, -1.0/samples_fading),
     ])
     return audio*fader
 
-def record_composition(seed):
-    composition = json.load(open(f"out/composition_seed_{seed}.json"))
+def fade_in_and_out(audio, sr, seconds_fading=8):
+    return fade_out(fade_in(audio, sr, seconds_fading=seconds_fading), sr, seconds_fading=seconds_fading)
+
+def record_composition(context, seed):
+    composition = json.load(open(f"out/composition_{context['name']}_seed_{seed}.json"))
 
     mashed = []
-    for i in range(1, len(composition)):
+    for i in range(1, len(composition), 2):
         j = i - 1
 
-        sr, data1 = wavfile.read(f'batch/audio/{composition[j]}.wav')
-        sr, data2 = wavfile.read(f'batch/audio/{composition[i]}.wav')
+        sr, data1 = wavfile.read(f'batch/audio_{context["name"]}/{composition[j]}.wav')
+        sr, data2 = wavfile.read(f'batch/audio_{context["name"]}/{composition[i]}.wav')
 
-        data1 = data1[:8000]
-        data2 = data2[:8000]
+        data1 = fade_in_and_out(data1, sr, seconds_fading=0.1)
+        data2 = fade_in_and_out(data2, sr, seconds_fading=0.1)
+
+        if context["name"]=="wave":
+            data1 = np.concatenate([data1, np.zeros(int(sr*0.5))])
+            data2 = np.concatenate([data2, np.zeros(int(sr*0.5))])
+        
+        if context["name"]=="flat":
+            data1 = data1[:8000]
+            data2 = data2[:8000]
 
         mashed.append(
             maad_crossfader(data1, data2, sr, 0.1)
         )
 
-    with open(f"out/audio_seed_{seed}.wav", 'wb') as f:
+    with open(f"out/audio_{context['name']}_seed_{seed}.wav", 'wb') as f:
         f.write(Audio(np.concatenate(mashed), rate=sr).data)
 
 def mix_compositions(seeds):
@@ -154,10 +167,14 @@ def mix_compositions(seeds):
         f.write(Audio(with_fading, rate=sr).data)
 
 if __name__=="__main__":
-    seeds = [4, 12, 20, 1]
-    mix_compositions(seeds)
+    # sample_space(wave)
+
+    # compose(wave, seed=1)
+
+    # seeds = [4, 12, 20, 1]
+    # mix_compositions(seeds)
     
     # seed = randint(0, PATCHES_IN_TOTAL-1)
     # seed = 20
     # compose(seed)
-    # record_composition(seed)
+    record_composition(wave, seed=1)
