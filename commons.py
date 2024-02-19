@@ -20,8 +20,20 @@ flat = {
         "detune5": 0,
         "detune6": 0,
     },
+    "PATCHES_IN_COMPOSITION": 300,
     "PATCHES_IN_TOTAL": 9000,
     "SAMPLE_LENGTH": 0.5,
+}
+
+point = {
+    "name": "point",
+    "params": flat["params"],
+    "values_range": flat["values_range"],
+    "constants": flat["constants"],
+    "constants": flat["constants"],
+    "PATCHES_IN_COMPOSITION": flat["PATCHES_IN_COMPOSITION"],
+    "PATCHES_IN_TOTAL": flat["PATCHES_IN_TOTAL"],
+    "SAMPLE_LENGTH": 0.05,
 }
 
 wave = {
@@ -77,6 +89,7 @@ wave = {
     },
     "PATCHES_IN_TOTAL": 8000,
     "SAMPLE_LENGTH": 4,
+    "PATCHES_IN_COMPOSITION": 30,
 }
 
 

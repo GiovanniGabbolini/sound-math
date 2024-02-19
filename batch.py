@@ -35,8 +35,7 @@ def sample_space(context):
 
         i += 1
 
-def compose(context, seed):
-    PATCHES_IN_COMPOSITION = 300
+def compute_similarity(context):
     SR = 44100
 
     _, examplar = wavfile.read(f"batch/audio_{context['name']}/{0}.wav")
@@ -51,14 +50,19 @@ def compose(context, seed):
     mffcs = np.zeros((context["PATCHES_IN_TOTAL"], len(examplar)), dtype=np.float32)
     for i in tqdm(range(context["PATCHES_IN_TOTAL"])):
         mffcs[i, :] = librosa.feature.mfcc(y=patches[i], sr=SR).flatten()
-    
+
     normalised = (mffcs.T / np.linalg.norm(mffcs, axis=1).T).T
     similarity = np.dot(normalised, normalised.T)
     np.fill_diagonal(similarity, 0.0)
 
+    with open(f"batch/similarity_{context['name']}.npy", "wb") as f:
+        np.save(f, similarity)
+
+def compose(context, seed):
+    similarity = np.load(open(f"batch/similarity_{context['name']}.npy", "rb"))
     composition = [seed]
 
-    while len(composition) < PATCHES_IN_COMPOSITION:
+    while len(composition) < context["PATCHES_IN_COMPOSITION"]:
         last_patch = composition[-1]
         next_patch = np.argmax(similarity[last_patch,:] + similarity[seed,:])
 
@@ -68,6 +72,32 @@ def compose(context, seed):
         composition.append(int(next_patch))
 
     json.dump(composition, open(f"out/composition_{context['name']}_seed_{seed}.json", "w"))
+
+    mashed = []
+    for i in range(1, len(composition), 2):
+        j = i - 1
+
+        sr, data1 = wavfile.read(f'batch/audio_{context["name"]}/{composition[j]}.wav')
+        sr, data2 = wavfile.read(f'batch/audio_{context["name"]}/{composition[i]}.wav')
+
+        if context["name"]=="flat":
+            f = lambda data: data[:int(sr/2)]
+            data1 = f(data1); data2 = f(data2)
+
+        elif context["name"]=="wave":
+            f = lambda data: fade_out(fade_in(data, sr, 0.1), sr, 2.0)
+            data1 = f(data1); data2 = f(data2)
+
+        elif context["name"]=="point":
+            f = lambda data: np.concatenate([data, np.zeros(int(sr*0.5))])
+            data1 = f(data1); data2 = f(data2)
+
+        mashed.append(
+            maad_crossfader(data1, data2, sr, 0.1)
+        )
+
+    with open(f"out/audio_{context['name']}_seed_{seed}.wav", 'wb') as f:
+        f.write(Audio(np.concatenate(mashed), rate=sr).data)
 
 def linear_crossfader(one, two):
     assert len(one) == len(two)
@@ -120,30 +150,6 @@ def fade_out(audio, sr, seconds_fading=8):
 def fade_in_and_out(audio, sr, seconds_fading=8):
     return fade_out(fade_in(audio, sr, seconds_fading=seconds_fading), sr, seconds_fading=seconds_fading)
 
-def record_composition(context, seed):
-    composition = json.load(open(f"out/composition_{context['name']}_seed_{seed}.json"))
-
-    mashed = []
-    for i in range(1, len(composition), 2):
-        j = i - 1
-
-        sr, data1 = wavfile.read(f'batch/audio_{context["name"]}/{composition[j]}.wav')
-        sr, data2 = wavfile.read(f'batch/audio_{context["name"]}/{composition[i]}.wav')
-
-        data1 = fade_in_and_out(data1, sr, seconds_fading=0.1)
-        data2 = fade_in_and_out(data2, sr, seconds_fading=0.1)
-
-        if context["name"]=="flat":
-            data1 = data1[:8000]
-            data2 = data2[:8000]
-
-        mashed.append(
-            maad_crossfader(data1, data2, sr, 0.1)
-        )
-
-    with open(f"out/audio_{context['name']}_seed_{seed}.wav", 'wb') as f:
-        f.write(Audio(np.concatenate(mashed), rate=sr).data)
-
 def mix_compositions(seeds):
     mashed = []
     for i in range(1, len(seeds)):
@@ -163,9 +169,11 @@ def mix_compositions(seeds):
         f.write(Audio(with_fading, rate=sr).data)
 
 if __name__=="__main__":
-    # sample_space(wave)
+    # sample_space(point)
+    # compute_similarity(flat)
 
-    # compose(wave, seed=1)
+    compose(flat, seed=24)
+    # compose(point, seed=0)
 
     # seeds = [4, 12, 20, 1]
     # mix_compositions(seeds)
@@ -173,4 +181,3 @@ if __name__=="__main__":
     # seed = randint(0, PATCHES_IN_TOTAL-1)
     # seed = 20
     # compose(seed)
-    record_composition(wave, seed=1)
