@@ -38,7 +38,7 @@ def sample_space(context):
 def compute_similarity(context):
     SR = 44100
 
-    _, examplar = wavfile.read(f"batch/audio_{context['name']}/{0}.wav")
+    SR, examplar = wavfile.read(f"batch/audio_{context['name']}/{0}.wav")
     patches = np.zeros((context["PATCHES_IN_TOTAL"], len(examplar)), dtype=np.float32)
 
     for i in tqdm(range(context["PATCHES_IN_TOTAL"])):
@@ -68,7 +68,7 @@ def compose(context, seed):
 
         similarity[last_patch, next_patch] = 0.0
         similarity[next_patch, last_patch] = 0.0
-        
+
         composition.append(int(next_patch))
 
     json.dump(composition, open(f"out/composition_{context['name']}_seed_{seed}.json", "w"))
@@ -81,7 +81,11 @@ def compose(context, seed):
         sr, data2 = wavfile.read(f'batch/audio_{context["name"]}/{composition[i]}.wav')
 
         if context["name"]=="flat":
-            f = lambda data: data[:int(sr/2)]
+            f = lambda data: fade_in_and_out(data[:int(0.15*sr)], sr, 0.001)
+            data1 = f(data1); data2 = f(data2)
+
+        if context["name"]=="bjork" or context["name"]=="jonnhy":
+            f = lambda data: fade_in_and_out(data, sr, 0.001)
             data1 = f(data1); data2 = f(data2)
 
         elif context["name"]=="wave":
@@ -92,9 +96,10 @@ def compose(context, seed):
             f = lambda data: np.concatenate([data, np.zeros(int(sr*0.5))])
             data1 = f(data1); data2 = f(data2)
 
-        mashed.append(
-            maad_crossfader(data1, data2, sr, 0.1)
-        )
+        if context["name"]=="flat":
+            mashed.append(maad_crossfader(data1, data2, sr, 0.05))
+        else:
+            mashed.append(maad_crossfader(data1, data2, sr, 0.1))
 
     with open(f"out/audio_{context['name']}_seed_{seed}.wav", 'wb') as f:
         f.write(Audio(np.concatenate(mashed), rate=sr).data)
@@ -170,9 +175,10 @@ def mix_compositions(seeds):
 
 if __name__=="__main__":
     # sample_space(point)
-    # compute_similarity(flat)
-
-    compose(flat, seed=24)
+    compose(flat, seed=0)
+    # compose(flat, seed=4)
+    # compose(flat, seed=24)
+    # compose(flat, seed=56)
     # compose(point, seed=0)
 
     # seeds = [4, 12, 20, 1]

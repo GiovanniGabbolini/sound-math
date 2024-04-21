@@ -1,5 +1,17 @@
 import random
 
+bjork = {
+    "name": "bjork",
+    "PATCHES_IN_COMPOSITION": 1000,
+    "PATCHES_IN_TOTAL": 1000,
+}
+
+jonnhy = {
+    "name": "jonnhy",
+    "PATCHES_IN_COMPOSITION": 10000,
+    "PATCHES_IN_TOTAL": 1500,
+}
+
 flat = {
     "name": "flat",
     "params": ["amp1", "amp2", "mod16", "mod66", "mod11", "mod23", "mod34", "mod45", "ratio1", "ratio2", "ratio3", "ratio4", "ratio5", "ratio6", "detune1", "detune2", "detune3", "detune4", "detune5", "detune6", "feedback", "lfofreq", "lfodepth"],
@@ -20,7 +32,7 @@ flat = {
         "detune5": 0,
         "detune6": 0,
     },
-    "PATCHES_IN_COMPOSITION": 300,
+    "PATCHES_IN_COMPOSITION": 4800,
     "PATCHES_IN_TOTAL": 9000,
     "SAMPLE_LENGTH": 0.5,
 }
