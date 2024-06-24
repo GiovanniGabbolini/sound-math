@@ -58,20 +58,26 @@ def compute_similarity(context):
     with open(f"batch/similarity_{context['name']}.npy", "wb") as f:
         np.save(f, similarity)
 
-def compose(context, seed):
+def compose(context, seeds):
     similarity = np.load(open(f"batch/similarity_{context['name']}.npy", "rb"))
-    composition = [seed]
 
-    while len(composition) < context["PATCHES_IN_COMPOSITION"]:
-        last_patch = composition[-1]
-        next_patch = np.argmax(similarity[last_patch,:] + similarity[seed,:])
+    assert context["PATCHES_IN_COMPOSITION"] % len(seeds) == 0
+    patches_per_seed = int(context["PATCHES_IN_COMPOSITION"] / len(seeds))
 
-        similarity[last_patch, next_patch] = 0.0
-        similarity[next_patch, last_patch] = 0.0
+    composition = [seeds[0]]
 
-        composition.append(int(next_patch))
+    for seed_idx in range(len(seeds)):
+        for _ in range(patches_per_seed):
+            last_patch = composition[-1]
+            next_patch = np.argmax(similarity[last_patch,:] + similarity[seeds[seed_idx],:])
 
-    json.dump(composition, open(f"out/composition_{context['name']}_seed_{seed}.json", "w"))
+            similarity[last_patch, next_patch] = 0.0
+            similarity[next_patch, last_patch] = 0.0
+
+            composition.append(int(next_patch))
+
+    assert len(composition) == (context["PATCHES_IN_COMPOSITION"] + 1)
+    json.dump(composition, open(f"out/composition_{context['name']}_seeds_{'_'.join([str(s) for s in seeds])}.json", "w"))
 
     mashed = []
     for i in range(1, len(composition), 2):
@@ -101,7 +107,7 @@ def compose(context, seed):
         else:
             mashed.append(maad_crossfader(data1, data2, sr, 0.1))
 
-    with open(f"out/audio_{context['name']}_seed_{seed}.wav", 'wb') as f:
+    with open(f"out/audio_{context['name']}_seed_{'_'.join([str(s) for s in seeds])}.wav", 'wb') as f:
         f.write(Audio(np.concatenate(mashed), rate=sr).data)
 
 def linear_crossfader(one, two):
@@ -175,7 +181,8 @@ def mix_compositions(seeds):
 
 if __name__=="__main__":
     # sample_space(point)
-    compose(flat, seed=0)
+    # compute_similarity(flat)
+    compose(flat, seeds=[89, 4, 20, 27, 42, 44, 54, 65, 115, 89])
     # compose(flat, seed=4)
     # compose(flat, seed=24)
     # compose(flat, seed=56)
